@@ -1,0 +1,16 @@
+[project]
+authors = ["fertito <fertito@fertito.net>"]
+channels = ["freecad/label/dev", "conda-forge"]
+description = "Fabric does something cool."
+name = "freecad.Fabric"
+platforms = ["osx-arm64", "linux-aarch64", "linux-64", "win-64", "osx-64"]
+version = "0.1.0"
+
+[pypi-dependencies]
+freecad_Fabric = { path = ".", editable = true }
+
+[tasks]
+test = "python tests/tests.py"
+
+[dependencies]
+freecad = ">=1.0.0,<2"
