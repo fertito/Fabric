@@ -1,7 +1,8 @@
 import os
 import FreeCADGui as Gui
 import FreeCAD as App
-from freecad. Fabric import my_numpy_function
+from freecad.Fabric import my_numpy_function
+from freecad.Fabric.commands import mesh_select
 
 translate=App.Qt.translate
 QT_TRANSLATE_NOOP=App.Qt.QT_TRANSLATE_NOOP
@@ -37,6 +38,10 @@ class Fabric(Gui.Workbench):
         App.Console.PrintMessage(translate(
             "Log",
             "Run a numpy function:") + "sqrt(100) = {}\n".format(my_numpy_function.my_foo(100)))
+
+        # Add mesh select command to toolbox
+        self.toolbox.append("MeshSelectCommand")
+
 
         # NOTE: Context for this commands must be "Workbench"
         self.appendToolbar(QT_TRANSLATE_NOOP("Workbench", "Tools"), self.toolbox)
