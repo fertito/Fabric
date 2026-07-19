@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import FreeCAD as App
 import FreeCADGui as Gui
+import numpy as np
 
 
 class MyMesh:
@@ -17,16 +18,17 @@ class MyMesh:
 
     def get_facet_normals(self):
         """Return a list of all facet normal vectors."""
-        return [facet[3] for facet in self.Facets]
+        # Return only normals (the fourth element of each facet)
+        return [facet[1] for facet in self.Facets]
         
     def get_facet_normal(self,index):
-        """Return a list of all facet normal vectors."""
-        return self.Facets[index][3]
+        """Return the normal vector of the facet at the given index."""
+        return self.Facets[index][1]
 
     def get_facet_points(self, index):
         """Return the three points of the facet at the given index."""
-        i, j, k, _ = self.Facets[index]
-        return [self.get_point(i), self.get_point(j), self.get_point(k)]
+        points = self.Facets[index][0]
+        return [self.get_point(i) for i in points]
         
     def get_plane_from_facet(self, index):
         """
@@ -39,23 +41,18 @@ class MyMesh:
         - np.ndarray: Plane equation coefficients [a, b, c, d].
         """
         facet = self.Facets[index]
-        point_index = facet[0]
-        normal = np.array(facet[1])  # Convert to NumPy array
-        point = np.array(facet[0][0])  # Convert point to NumPy array
-        print(point)
+        normal = np.array(facet[1])  # Normal vector
+        point = np.array(facet[0][0])  # First point
 
         a, b, c = normal
         x0, y0, z0 = point
         d = -(a * x0 + b * y0 + c * z0)
 
         return np.array([a, b, c, d])
-import math
 
 def distance_vectors(V0,V1):
-    return math.sqrt(math.pow(V1[0]-V0[0],2)+math.pow(V1[1]-V0[1],2)+math.pow(V1[2]-V0[2],2))
+    return np.sqrt(np.power(V1[0]-V0[0],2)+np.power(V1[1]-V0[1],2)+np.power(V1[2]-V0[2],2))
     
-import numpy as np
-
 def plane_intersects_triangle(plane, triangle):
     a, b, c, d = plane
     v0, v1, v2 = triangle
@@ -1099,8 +1096,8 @@ class MeshSelectCommand:
     def GetResources(self):
         return {
             'Pixmap': '',
-            'MenuText': 'Select Mesh',
-            'ToolTip': 'Select all mesh objects in the document'
+            'MenuText': 'Select and Process Two Meshes',
+            'ToolTip': 'Select two mesh objects and perform intersection operations'
         }
 
     def Activated(self):
@@ -1110,22 +1107,52 @@ class MeshSelectCommand:
             App.Console.PrintError("No active document\n")
             return
             
-        # Select all mesh objects
+        # Get currently selected objects
+        selection = Gui.Selection.getSelection()
+        
+        # Filter for mesh objects
         mesh_objects = []
         for obj in doc.Objects:
             if hasattr(obj, 'TypeId') and obj.TypeId == 'Mesh::Feature':
                 mesh_objects.append(obj)
-        
-        # Select the objects
-        if mesh_objects:
+                
+        if len(mesh_objects) < 2:
+            App.Console.PrintError("Need at least 2 mesh objects in the document\n")
+            return
+            
+        # Try to use selected objects first
+        selected_meshes = []
+        for obj in selection:
+            if hasattr(obj, 'TypeId') and obj.TypeId == 'Mesh::Feature':
+                selected_meshes.append(obj)
+                
+        # If we don't have 2 selected meshes, select all mesh objects and show information
+        if len(selected_meshes) < 2:
+            App.Console.PrintMessage("Please select exactly two mesh objects from the document.\n")
+            App.Console.PrintMessage(f"Found {len(mesh_objects)} mesh objects in this document\n")
+            
+            # Clear current selection and select all meshes
             Gui.Selection.clearSelection()
             for obj in mesh_objects:
                 Gui.Selection.addSelection(obj)
-            App.Console.PrintMessage(f"Selected {len(mesh_objects)} mesh objects\n")
-            create_mesh(doc,mesh_objects[1],mesh_objects[0])
-            # meshwork()
-        else:
-            App.Console.PrintMessage("No mesh objects found in document\n")
+                
+            # Return early, letting user make their selection
+            return
+            
+        if len(selected_meshes) > 2:
+            App.Console.PrintMessage("More than two objects selected. Using the first two.\n")
+            
+        # Use only first two selected meshes
+        mesh1 = selected_meshes[0]
+        mesh2 = selected_meshes[1]
+        
+        App.Console.PrintMessage(f"Processing meshes: {mesh1.Label} and {mesh2.Label}\n")
+        
+        # Perform operations on the two selected meshes 
+        create_mesh(doc, mesh1, mesh2)
+        
+        # Provide visual feedback
+        App.Console.PrintMessage("Mesh processing complete!\n")
 
     def IsActive(self):
         # Command is active if there's an active document
