@@ -8,6 +8,8 @@ class MyMesh:
     def __init__(self):
         self.Points = []
         self.Facets = []
+        self.Edges = []
+        self.Edge_point = []
 
     def add_facet(self, points, normal):
         self.Facets.append((points, normal))
@@ -52,7 +54,36 @@ class MyMesh:
 
 def distance_vectors(V0,V1):
     return np.sqrt(np.power(V1[0]-V0[0],2)+np.power(V1[1]-V0[1],2)+np.power(V1[2]-V0[2],2))
+
+def distance_point_to_plane(point, a, b, c, d):
+    """
+    Calculate the distance from a point to a plane.
     
+    The plane equation is: ax + by + cz + d = 0
+    
+    Parameters:
+    point (array-like): Coordinates of the point [x, y, z]
+    a, b, c, d (float): Coefficients of the plane equation ax + by + cz + d = 0
+    
+    Returns:
+    float: Distance from the point to the plane
+    """
+    # Convert point to numpy array
+    point = np.array(point)
+    
+    # Plane normal vector
+    normal = np.array([a, b, c])
+    
+    # Distance formula: |ax₀ + by₀ + cz₀ + d| / √(a² + b² + c²)
+    numerator = a * point[0] + b * point[1] + c * point[2] + d
+    denominator = np.sqrt(a**2 + b**2 + c**2)
+    
+    # Handle case where plane coefficients are all zero
+    if denominator == 0:
+        raise ValueError("Invalid plane equation: coefficients a, b, c cannot all be zero")
+    
+    return numerator / denominator
+   
 def plane_intersects_triangle(plane, triangle):
     a, b, c, d = plane
     v0, v1, v2 = triangle
@@ -263,6 +294,17 @@ def convert_freeCAD_to_your_mesh(freeCAD_mesh):
         indexpt+=1
 
         mesh.add_facet((p1, p2, p3), normal)
+
+    for pt in freeCAD_mesh.Topology[0] :
+        mesh.Edge_point.append(pt)
+
+    for facet in freeCAD_mesh.Topology[1] :
+        mesh.Edges.append([facet[0],facet[1]])
+        mesh.Edges.append([facet[1],facet[2]])
+        mesh.Edges.append([facet[2],facet[0]])
+
+    # print(mesh.Edges)
+    # exit(0)
 
     return mesh
     
@@ -629,7 +671,7 @@ def cut_mesh_with_plan(mesh1,mesh2):
         final_norm.append(seg[3])
 #    print(final_wire)
 #    print(final_norm)
-    return final_wire,final_norm,plane_normal
+    return final_wire,final_norm,plane_normal,plane
     #create a wire with the point coordinates
     #check if multiple segment here
     
@@ -753,12 +795,84 @@ def get_point_by_index(index):
 # obj = doc.getObject("Mesh")
 # obj = doc.getObject("Mesh001")
 
+from collections import Counter
+
+
+def find_mesh_edge(mesh):
+    edge = []
+    edge_id=[]
+    list_edge = []
+    for e in mesh.Edges:
+        s=sorted(e)
+        list_edge.append(str(s[0])+","+str(s[1]))
+    # print(list_edge)
+    counter_list = Counter(list_edge)
+    # print(counter_list)
+    for ed in list_edge:
+        if counter_list.get(ed)==1:
+            id = ed.split(",")
+            edge_id.append([int(id[0]),int(id[1])])
+        # print(counter_list.get(ed))
+    len_id= len(edge_id)
+    edge.append(mesh.Edge_point[edge_id[0][0]])
+    edge.append(mesh.Edge_point[edge_id[0][1]])
+    next_id = edge_id[0][1]
+    del edge_id[0]
+    # print(mesh.Edge_point)
+    for i in range(0,len_id):
+        print(next_id)
+        found = False
+        found_j=-1
+        for j in range(len(edge_id)) :
+            idx = edge_id[j]
+            if idx[0]==next_id and found == False:
+                edge.append(mesh.Edge_point[idx[1]])
+                next_id=idx[1]
+                found_j=j
+                found=True
+                # break
+            if idx[1]==next_id and found == False:
+                edge.append(mesh.Edge_point[idx[0]])
+                next_id=idx[0]
+                found_j=j
+                found=True
+                # break
+        if found==True:
+            del edge_id[found_j]
+    return edge
+
+def find_corner_edge(edge):
+    corner=[]
+    len_edge=len(edge)
+    for i in range(len_edge-2):
+        v0=App.Vector(edge[i+1][0]-edge[i][0],edge[i+1][1]-edge[i][1],edge[i+1][2]-edge[i][2])
+        v1=App.Vector(edge[i+2][0]-edge[i+1][0],edge[i+2][1]-edge[i+1][1],edge[i+2][2]-edge[i+1][2])
+        alpha = angle_between_vectors(v0,v1)
+        # print(alpha)
+        if alpha>=0.8 or alpha<=-0.8 :
+            corner.append((i,edge[i+1]))
+    v1=App.Vector(edge[1][0]-edge[0][0],edge[1][1]-edge[0][1],edge[1][2]-edge[0][2])
+    v0=App.Vector(edge[len_edge-2][0]-edge[0][0],edge[len_edge-2][1]-edge[0][1],edge[len_edge-2][2]-edge[0][2])
+    alpha = angle_between_vectors(v0,v1)
+    # print(alpha)
+    if alpha>=0.8 or alpha<=-0.8 :
+                corner.append((0,edge[0]))
+    return corner
+
 def create_mesh(doc,mesh1, mesh2):
     obj = doc.getObject("Mesh")
     result_mesh = convert_freeCAD_to_your_mesh(mesh1.Mesh)
     #print(result_mesh.Facets)
     #print(result_mesh.Points)
     #print(result_mesh.get_point(0))
+    ed = find_mesh_edge(result_mesh)
+    print(ed)
+    corner_pts=find_corner_edge(ed)
+    print(corner_pts)
+
+    wire = Draft.make_wire(ed, closed=False, placement=None, face=None, support=None)
+    doc.recompute()
+    # exit(0)
 
 
     mesh1=result_mesh
@@ -766,7 +880,7 @@ def create_mesh(doc,mesh1, mesh2):
     result_mesh = convert_freeCAD_to_your_mesh(mesh2.Mesh)
     mesh2=result_mesh
 
-    fw,nm,pn = cut_mesh_with_plan(mesh1,mesh2)
+    fw,nm,pn,first_plane = cut_mesh_with_plan(mesh1,mesh2)
 
 
 
@@ -817,6 +931,9 @@ def create_mesh(doc,mesh1, mesh2):
     U_curve=[]
     V_curve=[]
 
+    U_plane=[]
+    V_plane=[]
+
     directu=pn
     directv=App.Vector(curve[len(curve)-1][0]-curve[0][0],curve[len(curve)-1][1]-curve[0][1],curve[len(curve)-1][2]-curve[0][2])
     old_col=None
@@ -834,7 +951,8 @@ def create_mesh(doc,mesh1, mesh2):
         
         mesh_p = MyMesh()
         mesh_p.add_facet((p0,p1,p2),col_vector)
-        fwc,nmc,pnc = cut_mesh_with_plan(mesh1,mesh_p)
+        fwc,nmc,pnc,u_p= cut_mesh_with_plan(mesh1,mesh_p)
+        U_plane.append((i,u_p))
         fwc = Arrange_curve(fwc,directu)
         wire = Draft.make_wire(fwc, closed=False, placement=None, face=None, support=None)
         doc.recompute()
@@ -877,7 +995,8 @@ def create_mesh(doc,mesh1, mesh2):
         
         mesh_p = MyMesh()
         mesh_p.add_facet((p0,p1,p2),col_vector)
-        fwc,nmc,pnc = cut_mesh_with_plan(mesh1,mesh_p)
+        fwc,nmc,pnc,v_p= cut_mesh_with_plan(mesh1,mesh_p)
+        V_plane.append((j,v_p))
         fwc = Arrange_curve(fwc,directv)
         wire = Draft.make_wire(fwc, closed=False, placement=None, face=None, support=None)
         doc.recompute()
@@ -1063,6 +1182,34 @@ def create_mesh(doc,mesh1, mesh2):
     #obj.Mesh = mesh
     #obj.recompute()
 
+    # parse the corners here to add 2 facets at each corners
+    corner_uv=[]
+    for c in corner_pts:
+        min_u=10E10
+        min_v=10E10
+        Current_U=0
+        Current_V=0
+        for up in U_plane:
+            dist_p=abs(distance_point_to_plane(c[1],up[1][0],up[1][1],up[1][2],up[1][3]))
+            if dist_p<min_u:
+                min_u=dist_p
+                Current_U=up[0]
+        for vp in V_plane:
+            dist_p=abs(distance_point_to_plane(c[1],vp[1][0],vp[1][1],vp[1][2],vp[1][3]))
+            print(c)
+            print("dist "+str(dist_p)+" "+str(vp[0]) )
+            if dist_p<min_v:
+                min_v=dist_p
+                Current_V=vp[0]
+        corner_uv.append((c,Current_U,Current_V))
+    print("corner")
+    print(corner_uv)
+    print("U_plane")
+    print(U_plane)
+    print("V_plane")
+    print(V_plane)
+
+
 
     # Create mesh data
     mesh_data = []
@@ -1081,6 +1228,9 @@ def create_mesh(doc,mesh1, mesh2):
     obj = App.ActiveDocument.addObject("Mesh::Feature", "MyMesh")
     obj.Mesh = mesh
     doc.recompute()
+
+    print(U_plane)
+    print(V_plane)
     #
 
     ## Fast access
