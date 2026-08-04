@@ -859,6 +859,55 @@ def find_corner_edge(edge):
                 corner.append((0,edge[0]))
     return corner
 
+def xyz_to_uv(point,Uplane,Vplane,point_loockup):
+    u=-100
+    v=-100
+    min_u=10E10
+    min_v=10E10
+    min_d=10E10
+    Current_U=0
+    Current_V=0
+    # for up in U_plane:
+    #     dist_u=distance_point_to_plane(c[1],up[1][0],up[1][1],up[1][2],up[1][3])
+    #     for vp in V_plane:
+    #         dist_v=distance_point_to_plane(c[1],vp[1][0],vp[1][1],vp[1][2],vp[1][3])
+    #         p0= get_3d_point(up[0], vp[0],point_lookup)
+    #         if p0 is not None:
+    #             dist=distance_vectors(p0,c[1])
+    #             if dist<min_d:
+    #                 min_d=dist
+    #                 min_u=dist_u
+    #                 min_v=dist_v
+    #                 Current_U=up[0]
+    #                 Current_V=vp[0]
+    # corner_uv.append((c,Current_U,Current_V,min_u,min_v,min_d))
+    return u,v
+
+def split_polyline_by_corners(polyline,corners):
+    multi_poly=[]
+    return multi_poly
+
+def barycenter(vectors):
+    """
+    Calculate the barycenter (centroid) of an array of 3D vectors.
+    
+    Parameters:
+    vectors (array-like): Array of 3D vectors, where each vector is [x, y, z]
+    
+    Returns:
+    numpy.ndarray: The barycenter as a 3D vector [x, y, z]
+    
+    Example:
+    >>> vectors = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    >>> barycenter(vectors)
+    array([4., 5., 6.])
+    """
+    # Convert to numpy array if it isn't already
+    vectors = np.array(vectors)
+    
+    # Calculate the mean along the first axis (across all vectors)
+    return np.mean(vectors, axis=0)
+
 def create_mesh(doc,mesh1, mesh2):
     obj = doc.getObject("Mesh")
     result_mesh = convert_freeCAD_to_your_mesh(mesh1.Mesh)
@@ -869,6 +918,10 @@ def create_mesh(doc,mesh1, mesh2):
     print(ed)
     corner_pts=find_corner_edge(ed)
     print(corner_pts)
+
+    bary=barycenter(result_mesh.Points)
+    print(bary)
+    # exit()
 
     wire = Draft.make_wire(ed, closed=False, placement=None, face=None, support=None)
     doc.recompute()
@@ -935,7 +988,10 @@ def create_mesh(doc,mesh1, mesh2):
     V_plane=[]
 
     directu=pn
-    directv=App.Vector(curve[len(curve)-1][0]-curve[0][0],curve[len(curve)-1][1]-curve[0][1],curve[len(curve)-1][2]-curve[0][2])
+    directv=App.Vector(curve[0][0]-curve[0][len(curve[0])-1],curve[1][0]-curve[1][len(curve[0])-1],curve[2][0]-curve[2][len(curve[0])-1])
+
+    print(directv)
+    # exit()
     old_col=None
     for i in range(0,len(wir)-1):
     #    create a vector
@@ -1041,6 +1097,75 @@ def create_mesh(doc,mesh1, mesh2):
     # Create lookup table
     point_lookup,mx,my,index_map, vertices  = create_numpy_lookup(U_array)
 
+    bary_dir=App.Vector(bary[0],bary[1],bary[2]+1.0)
+
+    edge_point_array = {"index" : [], "point" : [], "angle" : []}
+    indee=0
+    diru=directu
+    dirv=directv
+    for U in U_curve : 
+        edge_point_array["index"].append(indee)
+        edge_point_array["point"].append(U[0][0])
+        dire=App.Vector(U[0][0][0]-bary[0],U[0][0][1]-bary[1],U[0][0][2]-bary[2])
+        ang=np.arctan2(cos_between_vectors(diru,dire),cos_between_vectors(dirv,dire))
+        # ang=angle_between_vectors(bary_dir,dire)
+        edge_point_array["angle"].append(ang)
+        # edge_point_array.update({edge_point_array,{"index" : indee, "point" : U[0]}})
+        indee+=1
+        edge_point_array["index"].append(indee)
+        edge_point_array["point"].append(U[0][len(U[0])-1])
+        dire=App.Vector(U[0][len(U[0])-1][0]-bary[0],U[0][len(U[0])-1][1]-bary[1],U[0][len(U[0])-1][2]-bary[2])
+        ang=np.arctan2(cos_between_vectors(diru,dire),cos_between_vectors(dirv,dire))
+        # ang=angle_between_vectors(bary_dir,dire)
+        edge_point_array["angle"].append(ang)
+        # edge_point_array.update({edge_point_array,{"index" : indee, "point" : U[len(U)-1]}})
+        indee+=1
+    for V in V_curve : 
+        edge_point_array["index"].append(indee)
+        edge_point_array["point"].append(V[0][0])
+        dire=App.Vector(V[0][0][0]-bary[0],V[0][0][1]-bary[1],V[0][0][2]-bary[2])
+        ang=np.arctan2(cos_between_vectors(diru,dire),cos_between_vectors(dirv,dire))
+        # ang=angle_between_vectors(bary_dir,dire)
+        edge_point_array["angle"].append(ang)
+        # edge_point_array.update({edge_point_array,{"index" : indee, "point" : U[0]}})
+        indee+=1
+        edge_point_array["index"].append(indee)
+        edge_point_array["point"].append(V[0][len(V[0])-1])
+        dire=App.Vector(V[0][len(V[0])-1][0]-bary[0],V[0][len(V[0])-1][1]-bary[1],V[0][len(V[0])-1][2]-bary[2])
+        ang=np.arctan2(cos_between_vectors(diru,dire),cos_between_vectors(dirv,dire))
+        # ang=angle_between_vectors(bary_dir,dire)
+        edge_point_array["angle"].append(ang)
+        # edge_point_array.update({edge_point_array,{"index" : indee, "point" : U[len(U)-1]}})
+        indee+=1
+    for c in corner_pts:
+        print(c)
+        edge_point_array["index"].append(indee)
+        edge_point_array["point"].append(c[1])
+        dire=App.Vector(c[1][0]-bary[0],c[1][1]-bary[1],c[1][2]-bary[2])
+        ang=np.arctan2(cos_between_vectors(diru,dire),cos_between_vectors(dirv,dire))
+        # ang=angle_between_vectors(bary_dir,dire)
+        edge_point_array["angle"].append(ang)
+        indee+=1
+    print(edge_point_array)
+    sorted_indices = sorted(range(len(edge_point_array['angle'])), key=lambda i: edge_point_array['angle'][i])
+
+    # Reorder all lists in the dictionary according to sorted indices
+    edge_sorted_by_angle = {
+        'index': [edge_point_array['index'][i] for i in sorted_indices],
+        'point': [edge_point_array['point'][i] for i in sorted_indices],
+        'angle': [edge_point_array['angle'][i] for i in sorted_indices]
+    }
+
+    print(edge_sorted_by_angle)
+    # for e in edge_point_array:
+    #     print(e)
+    print(directu,directv)
+    wire = Draft.make_wire(edge_sorted_by_angle['point'], closed=False, placement=None, face=None, support=None)
+    doc.recompute()
+    # exit()
+
+
+
     import Mesh
 
     facets=[]
@@ -1111,7 +1236,7 @@ def create_mesh(doc,mesh1, mesh2):
     #        if(first_p2 is not None) and (second_p2 is not None) and (p0 is not None):
     #            facets.append([p0,first_p2,second_p2])
                 
-                
+            # edges front and back   
             first_p0=None
             second_p0=None
             p0= get_3d_point(u, v,point_lookup)
@@ -1166,50 +1291,64 @@ def create_mesh(doc,mesh1, mesh2):
         p2= get_3d_point(u, v+1,point_lookup)
         if (p0 is not None) and (p1 is not None) and (p2 is not None) :
             facets.append([p0,p1,p2])
-    ## Create mesh from data
-    ## Convert to the format expected by fromData
-    #mesh_data = []
-    #for triangle in facets:
-    #    # Each triangle is a list of 3 vertex indices
-    #    mesh_data.append(triangle)
-    #
-    ## Create mesh using fromData (this is the correct way)
-    #mesh = Mesh.Mesh()
-    #mesh.setdata(vertices, facets)  # Use setdata instead
-    #
-    ## Add to document
-    #obj = FreeCAD.ActiveDocument.addObject("Mesh::Feature", "MyMesh")
-    #obj.Mesh = mesh
-    #obj.recompute()
 
     # parse the corners here to add 2 facets at each corners
     corner_uv=[]
     for c in corner_pts:
         min_u=10E10
         min_v=10E10
+        min_d=10E10
         Current_U=0
         Current_V=0
         for up in U_plane:
-            dist_p=abs(distance_point_to_plane(c[1],up[1][0],up[1][1],up[1][2],up[1][3]))
-            if dist_p<min_u:
-                min_u=dist_p
-                Current_U=up[0]
-        for vp in V_plane:
-            dist_p=abs(distance_point_to_plane(c[1],vp[1][0],vp[1][1],vp[1][2],vp[1][3]))
-            print(c)
-            print("dist "+str(dist_p)+" "+str(vp[0]) )
-            if dist_p<min_v:
-                min_v=dist_p
-                Current_V=vp[0]
-        corner_uv.append((c,Current_U,Current_V))
+            dist_u=distance_point_to_plane(c[1],up[1][0],up[1][1],up[1][2],up[1][3])
+            for vp in V_plane:
+                dist_v=distance_point_to_plane(c[1],vp[1][0],vp[1][1],vp[1][2],vp[1][3])
+                p0= get_3d_point(up[0], vp[0],point_lookup)
+                if p0 is not None:
+                    dist=distance_vectors(p0,c[1])
+                    if dist<min_d:
+                        min_d=dist
+                        min_u=dist_u
+                        min_v=dist_v
+                        Current_U=up[0]
+                        Current_V=vp[0]
+        corner_uv.append((c,Current_U,Current_V,min_u,min_v,min_d))
     print("corner")
     print(corner_uv)
-    print("U_plane")
-    print(U_plane)
-    print("V_plane")
-    print(V_plane)
 
+    # Create detection of different corners : bottom/left, bottom/right, ...
 
+    p0= get_3d_point(corner_uv[0][1],corner_uv[0][2],point_lookup)
+    p1= corner_uv[0][0][1]
+    p2= V_curve[corner_uv[0][2]][0][0]
+    p4= U_curve[corner_uv[0][1]][0][len(U_curve[corner_uv[0][1]][0])-1]
+    facets.append([p0,p4,p2])
+    facets.append([p2,p4,p1])
+
+    p0= get_3d_point(corner_uv[1][1],corner_uv[1][2],point_lookup)
+    p1= corner_uv[1][0][1]
+    p2= U_curve[corner_uv[1][1]][0][len(U_curve[corner_uv[1][1]][0])-1]
+    p4= V_curve[corner_uv[1][2]][0][len(V_curve[corner_uv[1][2]][0])-1]
+    facets.append([p0,p1,p2])
+    facets.append([p0,p4,p1])
+
+    p0= get_3d_point(corner_uv[2][1],corner_uv[2][2],point_lookup)
+    p1= corner_uv[2][0][1]
+    p2= U_curve[corner_uv[2][1]][0][0]
+    p4= V_curve[corner_uv[2][2]][0][len(V_curve[corner_uv[2][2]][0])-1]
+    facets.append([p2,p1,p0])
+    facets.append([p1,p4,p0])
+    print(corner_uv[2])
+
+    p0= get_3d_point(corner_uv[3][1],corner_uv[3][2],point_lookup)
+    p1= corner_uv[3][0][1]
+    p2= U_curve[corner_uv[3][1]][0][0]
+    p4= V_curve[corner_uv[3][2]][0][0]
+    facets.append([p0,p1,p2])
+    facets.append([p0,p4,p1])
+
+    # End
 
     # Create mesh data
     mesh_data = []
@@ -1229,8 +1368,6 @@ def create_mesh(doc,mesh1, mesh2):
     obj.Mesh = mesh
     doc.recompute()
 
-    print(U_plane)
-    print(V_plane)
     #
 
     ## Fast access
