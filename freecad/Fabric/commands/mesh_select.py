@@ -612,7 +612,10 @@ def cut_mesh_with_plan(mesh1,mesh2):
         #[Vector (-0.19024121761322021, 0.956407368183136, 0.2215699851512909), Vector (0.990969181060791, 0.051342807710170746, 0.12387114763259888), Vector (0.19024120271205902, 0.9564073085784912, 0.2215699851512909), Vector (-0.990969181060791, 0.051342789083719254, 0.12387114763259888)]
         #plane norm [ 0.00000000e+00  4.61272976e-01 -4.09008900e+00  7.94954642e+02]
 
-    #find the first starting point (opened curve)    
+    #find the first starting point (opened curve)  
+    if len(point_array)<2 : 
+        return None,None,plane_normal,plane
+        
     final_seg=[]
     next_point=None 
     last_index=0
@@ -908,6 +911,106 @@ def barycenter(vectors):
     # Calculate the mean along the first axis (across all vectors)
     return np.mean(vectors, axis=0)
 
+def plane_intersection_vector(a1, b1, c1, d1, a2, b2, c2, d2):
+    """
+    Find the direction vector of the intersection line of two planes.
+    
+    Planes are defined by: a*x + b*y + c*z + d = 0
+    
+    Parameters:
+    a1, b1, c1, d1: coefficients of first plane
+    a2, b2, c2, d2: coefficients of second plane
+    
+    Returns:
+    numpy.array: direction vector of intersection line, or None if planes are parallel
+    """
+    
+    # Normal vectors of the planes
+    n1 = np.array([a1, b1, c1])
+    n2 = np.array([a2, b2, c2])
+    
+    # Compute cross product of normal vectors
+    direction_vector = np.cross(n1, n2)
+    
+    # Check if planes are parallel (cross product is zero vector)
+    if np.allclose(direction_vector, [0, 0, 0]):
+        return None  # Planes are parallel or identical
+    
+    # Normalize the direction vector (optional, but often useful)
+    norm = np.linalg.norm(direction_vector)
+    if norm > 0:
+        direction_vector = direction_vector / norm
+    
+    return direction_vector
+def get_uv(point,U_plane,V_plane,point_lookup,distu,distv,distz=1.0, tolerance=0.5):
+    min_u=10E10
+    min_v=10E10
+    Current_U=-1
+    Current_V=-1
+
+    for idu in range(0,len(U_plane)-1):
+        dist_u0=round(distance_point_to_plane(point,U_plane[idu][1][0],U_plane[idu][1][1],U_plane[idu][1][2],U_plane[idu][1][3]),2)
+        dist_u1=round(distance_point_to_plane(point,U_plane[idu+1][1][0],U_plane[idu+1][1][1],U_plane[idu+1][1][2],U_plane[idu+1][1][3]),2)
+        print(idu,dist_u0,dist_u1,distu)
+        if dist_u0==0.0 and dist_u1<0.0 :#and dist_u1>(-distu-tolerance) and dist_u1<(-distu+tolerance):
+            print("on U0")
+            Current_U=idu
+            min_u=float(Current_U)
+            break
+        if dist_u1==0.0 and dist_u0>0.0 :#and dist_u0>(distu-tolerance) and dist_u0<(distu+tolerance):
+            print("on U1")
+            Current_U=idu+1
+            min_u=float(Current_U)
+            break
+        elif dist_u0>0.0 and dist_u1<0.0 :#and 2*tolerance+dist_u0-dist_u1>distu :
+            print("between U0 and U1")
+            min_u=float(idu)+dist_u0/(dist_u0-dist_u1)
+            Current_U=idu
+            break
+    if Current_U==-1:
+        return point,Current_U,Current_V,min_u,min_v
+    for idv in range(0,len(V_plane)-1):
+        dist_v0=round(distance_point_to_plane(point,V_plane[idv][1][0],V_plane[idv][1][1],V_plane[idv][1][2],V_plane[idv][1][3]),2)
+        dist_v1=round(distance_point_to_plane(point,V_plane[idv+1][1][0],V_plane[idv+1][1][1],V_plane[idv+1][1][2],V_plane[idv+1][1][3]),2)
+        print(idv,dist_v0,dist_v1,distv)
+        if dist_v0==0.0 and dist_v1<0.0 :#and dist_v1>(-distv-tolerance) and dist_v1<(-distv+tolerance):
+            print("on V0")
+            Current_V=idv
+            min_v=float(Current_V)
+            break
+        if dist_v1==0.0 and dist_v0>0.0 :#and dist_v0>(distv-tolerance) and dist_v0<(distv+tolerance):
+            print("on V1")
+            Current_V=idv+1
+            min_v=float(Current_V)
+            break
+        elif dist_v0>0.0 and dist_v1<0.0 :#and 2*tolerance+dist_v0-dist_v1>distu :
+            print("between V0 and V1")
+            min_v=float(idv)+dist_v0/(dist_v0-dist_v1)
+            Current_V=idv
+            break
+    return point,Current_U,Current_V,min_u,min_v
+
+def get_uv_reference(point,U_plane,V_plane,point_lookup):
+    min_u=10E10
+    min_v=10E10
+    min_d=10E10
+    Current_U=0
+    Current_V=0
+    for up in U_plane:
+        dist_u=round(distance_point_to_plane(point,up[1][0],up[1][1],up[1][2],up[1][3]),2)
+        for vp in V_plane:
+            dist_v=round(distance_point_to_plane(point,vp[1][0],vp[1][1],vp[1][2],vp[1][3]),2)
+            p0= get_3d_point(up[0], vp[0],point_lookup)
+            if p0 is not None:
+                dist=round(distance_vectors(p0,point),2)
+                if dist<min_d:
+                    min_d=dist
+                    min_u=dist_u
+                    min_v=dist_v
+                    Current_U=up[0]
+                    Current_V=vp[0]
+    return point,Current_U,Current_V,min_u,min_v,min_d
+
 def create_mesh(doc,mesh1, mesh2):
     obj = doc.getObject("Mesh")
     result_mesh = convert_freeCAD_to_your_mesh(mesh1.Mesh)
@@ -952,7 +1055,7 @@ def create_mesh(doc,mesh1, mesh2):
     #print("Intersection point:", intersection)
 
 
-    num_points = 10
+    num_points = 12
 
 
     #approximation
@@ -963,18 +1066,32 @@ def create_mesh(doc,mesh1, mesh2):
     tck, u = splprep(points.T, k=2, s=0.5)
 
 
-    u_new = np.linspace(0, 1, num=num_points)
+    u_new = np.linspace(0, 1, num=num_points-2)
     curve = splev(u_new, tck, der=0)
 
+    len_curve=len(curve[0])
+
+    Curve_U = []
+
+    start_vector = App.Vector(curve[0][0]+(curve[0][0]-curve[0][1]),curve[1][0]+(curve[1][0]-curve[1][1]),curve[2][0]+(curve[2][0]-curve[2][1]))
+
+    Curve_U.append(start_vector)
+    for i in range(0,len_curve):
+        Curve_U.append(App.Vector(curve[0][i],curve[1][i],curve[2][i]))
+
+    end_vector = App.Vector(curve[0][len_curve-1]+(curve[0][len_curve-1]-curve[0][len_curve-2]),curve[1][len_curve-1]+(curve[1][len_curve-1]-curve[1][len_curve-2]),curve[2][len_curve-1]+(curve[2][len_curve-1]-curve[2][len_curve-2]))
+    Curve_U.append(end_vector)
+
+    Len_U=distance_vectors(Curve_U[0],Curve_U[1])
     wir=[]
 
     for i in range(num_points):
-        wir.append(App.Vector(curve[0][i],curve[1][i],curve[2][i]))
+        wir.append(App.Vector(Curve_U[i]))
 
     directu=App.Vector(0.0,0.0,1.0)
     wir = Arrange_curve(wir,directu)
 
-    #wire = Draft.make_wire(wir, closed=False, placement=None, face=None, support=None)
+    wire = Draft.make_wire(wir, closed=False, placement=None, face=None, support=None)
     doc.recompute()
     last_len=0
     curr_len=0
@@ -1009,30 +1126,45 @@ def create_mesh(doc,mesh1, mesh2):
         mesh_p.add_facet((p0,p1,p2),col_vector)
         fwc,nmc,pnc,u_p= cut_mesh_with_plan(mesh1,mesh_p)
         U_plane.append((i,u_p))
-        fwc = Arrange_curve(fwc,directu)
-        wire = Draft.make_wire(fwc, closed=False, placement=None, face=None, support=None)
-        doc.recompute()
-        U_curve.append((fwc,nmc,pnc))
-        
-        curr_len=0
-        for j in range(len(fwc)-1):
-            curr_len += distance_vectors(fwc[j],fwc[j+1])
-        if curr_len>=last_len:
-            fw_max_len=fwc
-            last_len=curr_len
-            pnc=pn
+        if fwc is not None :
+            fwc = Arrange_curve(fwc,directu)
+            wire = Draft.make_wire(fwc, closed=False, placement=None, face=None, support=None)
+            doc.recompute()
+            U_curve.append((fwc,nmc,pnc))
+            
+            curr_len=0
+            for j in range(len(fwc)-1):
+                curr_len += distance_vectors(fwc[j],fwc[j+1])
+            if curr_len>=last_len:
+                fw_max_len=fwc
+                last_len=curr_len
+                pnc=pn
+        else :
+            U_curve.append((None,nmc,pnc))
             
 
     points = np.array(fw_max_len)
     tck, u = splprep(points.T, k=2, s=0.5)
     #num_points = 50
-    u_new = np.linspace(0, 1, num=num_points)
+    u_new = np.linspace(0, 1, num=num_points-2)
     curve = splev(u_new, tck, der=0)
     wir_c=[]
 
-    for j in range(num_points):
-        wir_c.append(App.Vector(curve[0][j],curve[1][j],curve[2][j]))
+    len_curve=len(curve[0])
+    Curve_V = []
+    
+    start_vector = App.Vector(curve[0][0]+(curve[0][0]-curve[0][1]),curve[1][0]+(curve[1][0]-curve[1][1]),curve[2][0]+(curve[2][0]-curve[2][1]))
 
+    Curve_V.append(start_vector)
+    for i in range(0,len_curve):
+        Curve_V.append(App.Vector(curve[0][i],curve[1][i],curve[2][i]))
+        
+    end_vector = App.Vector(curve[0][len_curve-1]+(curve[0][len_curve-1]-curve[0][len_curve-2]),curve[1][len_curve-1]+(curve[1][len_curve-1]-curve[1][len_curve-2]),curve[2][len_curve-1]+(curve[2][len_curve-1]-curve[2][len_curve-2]))
+    Curve_V.append(end_vector)
+
+    for j in range(num_points):
+        wir_c.append(Curve_V[j])
+    Len_V=distance_vectors(Curve_V[0],Curve_V[1])
     wire = Draft.make_wire(wir_c, closed=False, placement=None, face=None, support=None)
     doc.recompute()
 
@@ -1053,10 +1185,13 @@ def create_mesh(doc,mesh1, mesh2):
         mesh_p.add_facet((p0,p1,p2),col_vector)
         fwc,nmc,pnc,v_p= cut_mesh_with_plan(mesh1,mesh_p)
         V_plane.append((j,v_p))
-        fwc = Arrange_curve(fwc,directv)
-        wire = Draft.make_wire(fwc, closed=False, placement=None, face=None, support=None)
-        doc.recompute()
-        V_curve.append((fwc,nmc,pnc))
+        if fwc is not None:
+            fwc = Arrange_curve(fwc,directv)
+            wire = Draft.make_wire(fwc, closed=False, placement=None, face=None, support=None)
+            doc.recompute()
+            V_curve.append((fwc,nmc,pnc))
+        else :
+            V_curve.append((None,nmc,pnc))
             
 
 
@@ -1065,29 +1200,31 @@ def create_mesh(doc,mesh1, mesh2):
     v_index=0
     u_index=0;
     for V in V_curve:
-        wir.append(V[0][0])
-    #    U_array.append((u_index-1,v_index,V[0][len(V[0])-1]))
-        for j in range(len(V[0])-1):
-            p2=V[0][j]
-            p3=V[0][j+1]
-            u_index=0;  
-    #        U_array.append((u_index,v_index-1,V[0][0]))   
-            for U in U_curve:
-                for i in range(len(U[0])-1):
-                    p0=U[0][i]
-                    p1=U[0][i+1]
-            
-                    intersection, is_intersecting = find_intersection(p0, p1, p2, p3,tolerance=0.001)
-                    if is_intersecting:
-                        print(u_index,v_index,f"Segments intersect at: {intersection}")
-                        U_array.append((u_index,v_index,intersection))
-                        wir.append(App.Vector(intersection))
-                        break
-    #                    doc.addObject("Part::Vertex","Vertex")
-    #                    doc.Vertex.Placement=App.Placement(App.Vector(intersection[0],intersection[1],intersection[2]),App.Rotation(App.Vector(0.00,0.00,1.00),0.00))
-                u_index+=1
-    #        U_array.append((u_index,v_index+1,V[0][0]))
-        wir.append(V[0][len(V[0])-1])
+        if V[0] is not None:
+            wir.append(V[0][0])
+        #    U_array.append((u_index-1,v_index,V[0][len(V[0])-1]))
+            for j in range(len(V[0])-1):
+                p2=V[0][j]
+                p3=V[0][j+1]
+                u_index=0;  
+        #        U_array.append((u_index,v_index-1,V[0][0]))   
+                for U in U_curve:
+                    if U[0] is not None:
+                        for i in range(len(U[0])-1):
+                            p0=U[0][i]
+                            p1=U[0][i+1]
+                    
+                            intersection, is_intersecting = find_intersection(p0, p1, p2, p3,tolerance=0.001)
+                            if is_intersecting:
+                                print(u_index,v_index,f"Segments intersect at: {intersection}")
+                                U_array.append((u_index,v_index,intersection))
+                                wir.append(App.Vector(intersection))
+                                break
+            #                    doc.addObject("Part::Vertex","Vertex")
+            #                    doc.Vertex.Placement=App.Placement(App.Vector(intersection[0],intersection[1],intersection[2]),App.Rotation(App.Vector(0.00,0.00,1.00),0.00))
+                    u_index+=1
+        #        U_array.append((u_index,v_index+1,V[0][0]))
+            wir.append(V[0][len(V[0])-1])
         v_index+=1
             
     print(U_array)
@@ -1097,46 +1234,48 @@ def create_mesh(doc,mesh1, mesh2):
     # Create lookup table
     point_lookup,mx,my,index_map, vertices  = create_numpy_lookup(U_array)
 
-    bary_dir=App.Vector(bary[0],bary[1],bary[2]+1.0)
+    # Create an edge out of any U, V and corners
 
     edge_point_array = {"index" : [], "point" : [], "angle" : []}
     indee=0
     diru=directu
     dirv=directv
     for U in U_curve : 
-        edge_point_array["index"].append(indee)
-        edge_point_array["point"].append(U[0][0])
-        dire=App.Vector(U[0][0][0]-bary[0],U[0][0][1]-bary[1],U[0][0][2]-bary[2])
-        ang=np.arctan2(cos_between_vectors(diru,dire),cos_between_vectors(dirv,dire))
-        # ang=angle_between_vectors(bary_dir,dire)
-        edge_point_array["angle"].append(ang)
-        # edge_point_array.update({edge_point_array,{"index" : indee, "point" : U[0]}})
-        indee+=1
-        edge_point_array["index"].append(indee)
-        edge_point_array["point"].append(U[0][len(U[0])-1])
-        dire=App.Vector(U[0][len(U[0])-1][0]-bary[0],U[0][len(U[0])-1][1]-bary[1],U[0][len(U[0])-1][2]-bary[2])
-        ang=np.arctan2(cos_between_vectors(diru,dire),cos_between_vectors(dirv,dire))
-        # ang=angle_between_vectors(bary_dir,dire)
-        edge_point_array["angle"].append(ang)
-        # edge_point_array.update({edge_point_array,{"index" : indee, "point" : U[len(U)-1]}})
-        indee+=1
+        if U[0] is not None:
+            edge_point_array["index"].append(indee)
+            edge_point_array["point"].append(U[0][0])
+            dire=App.Vector(U[0][0][0]-bary[0],U[0][0][1]-bary[1],U[0][0][2]-bary[2])
+            ang=np.arctan2(cos_between_vectors(diru,dire),cos_between_vectors(dirv,dire))
+            # ang=angle_between_vectors(bary_dir,dire)
+            edge_point_array["angle"].append(ang)
+            # edge_point_array.update({edge_point_array,{"index" : indee, "point" : U[0]}})
+            indee+=1
+            edge_point_array["index"].append(indee)
+            edge_point_array["point"].append(U[0][len(U[0])-1])
+            dire=App.Vector(U[0][len(U[0])-1][0]-bary[0],U[0][len(U[0])-1][1]-bary[1],U[0][len(U[0])-1][2]-bary[2])
+            ang=np.arctan2(cos_between_vectors(diru,dire),cos_between_vectors(dirv,dire))
+            # ang=angle_between_vectors(bary_dir,dire)
+            edge_point_array["angle"].append(ang)
+            # edge_point_array.update({edge_point_array,{"index" : indee, "point" : U[len(U)-1]}})
+            indee+=1
     for V in V_curve : 
-        edge_point_array["index"].append(indee)
-        edge_point_array["point"].append(V[0][0])
-        dire=App.Vector(V[0][0][0]-bary[0],V[0][0][1]-bary[1],V[0][0][2]-bary[2])
-        ang=np.arctan2(cos_between_vectors(diru,dire),cos_between_vectors(dirv,dire))
-        # ang=angle_between_vectors(bary_dir,dire)
-        edge_point_array["angle"].append(ang)
-        # edge_point_array.update({edge_point_array,{"index" : indee, "point" : U[0]}})
-        indee+=1
-        edge_point_array["index"].append(indee)
-        edge_point_array["point"].append(V[0][len(V[0])-1])
-        dire=App.Vector(V[0][len(V[0])-1][0]-bary[0],V[0][len(V[0])-1][1]-bary[1],V[0][len(V[0])-1][2]-bary[2])
-        ang=np.arctan2(cos_between_vectors(diru,dire),cos_between_vectors(dirv,dire))
-        # ang=angle_between_vectors(bary_dir,dire)
-        edge_point_array["angle"].append(ang)
-        # edge_point_array.update({edge_point_array,{"index" : indee, "point" : U[len(U)-1]}})
-        indee+=1
+         if V[0] is not None:
+            edge_point_array["index"].append(indee)
+            edge_point_array["point"].append(V[0][0])
+            dire=App.Vector(V[0][0][0]-bary[0],V[0][0][1]-bary[1],V[0][0][2]-bary[2])
+            ang=np.arctan2(cos_between_vectors(diru,dire),cos_between_vectors(dirv,dire))
+            # ang=angle_between_vectors(bary_dir,dire)
+            edge_point_array["angle"].append(ang)
+            # edge_point_array.update({edge_point_array,{"index" : indee, "point" : U[0]}})
+            indee+=1
+            edge_point_array["index"].append(indee)
+            edge_point_array["point"].append(V[0][len(V[0])-1])
+            dire=App.Vector(V[0][len(V[0])-1][0]-bary[0],V[0][len(V[0])-1][1]-bary[1],V[0][len(V[0])-1][2]-bary[2])
+            ang=np.arctan2(cos_between_vectors(diru,dire),cos_between_vectors(dirv,dire))
+            # ang=angle_between_vectors(bary_dir,dire)
+            edge_point_array["angle"].append(ang)
+            # edge_point_array.update({edge_point_array,{"index" : indee, "point" : U[len(U)-1]}})
+            indee+=1
     for c in corner_pts:
         print(c)
         edge_point_array["index"].append(indee)
@@ -1155,7 +1294,9 @@ def create_mesh(doc,mesh1, mesh2):
         'point': [edge_point_array['point'][i] for i in sorted_indices],
         'angle': [edge_point_array['angle'][i] for i in sorted_indices]
     }
-
+    # edge_sorted_by_angle["index"].append(edge_sorted_by_angle["index"][0])
+    # edge_sorted_by_angle["point"].append(edge_sorted_by_angle["point"][0])
+    # edge_sorted_by_angle["angle"].append(edge_sorted_by_angle["angle"][0])
     print(edge_sorted_by_angle)
     # for e in edge_point_array:
     #     print(e)
@@ -1163,192 +1304,329 @@ def create_mesh(doc,mesh1, mesh2):
     wire = Draft.make_wire(edge_sorted_by_angle['point'], closed=False, placement=None, face=None, support=None)
     doc.recompute()
     # exit()
+    # End
+    facets=[]
+    # Create Factorial U and V table out of an edge curve
+
+    edge_uv=[]
+    for c in edge_sorted_by_angle['point']:
+        # c,Current_U,Current_V,min_u,min_v,min_d = get_uv_reference(c,U_plane,V_plane,point_lookup)
+        min_d=0.0
+        c,Current_U,Current_V,min_u,min_v = get_uv(c,U_plane,V_plane,point_lookup,Len_U,Len_V,distz=1.0, tolerance=1.0)
+        # min_u=10E10
+        # min_v=10E10
+        # min_d=10E10
+        # Current_U=0
+        # Current_V=0
+        # for up in U_plane:
+        #     dist_u=round(distance_point_to_plane(c,up[1][0],up[1][1],up[1][2],up[1][3]),2)
+        #     for vp in V_plane:
+        #         dist_v=round(distance_point_to_plane(c,vp[1][0],vp[1][1],vp[1][2],vp[1][3]),2)
+        #         p0= get_3d_point(up[0], vp[0],point_lookup)
+        #         if p0 is not None:
+        #             dist=round(distance_vectors(p0,c),2)
+        #             if dist<min_d:
+        #                 min_d=dist
+        #                 min_u=dist_u
+        #                 min_v=dist_v
+        #                 Current_U=up[0]
+        #                 Current_V=vp[0]
+        edge_uv.append((c,Current_U,Current_V,min_u,min_v,min_d))
+    print("edge_uv")
+    for e in edge_uv:
+        print(e)
+
+    mesh_point_array=[]
+    for u in range(num_points):
+        for v in range(num_points):
+            p0= get_3d_point(u, v,point_lookup)
+            if p0 is not None :
+                p=App.Vector(p0[0],p0[1],p0[2])
+                mesh_point_array.append([float(u),float(v),p])
+    for e in edge_uv:
+        mesh_point_array.append([e[3],e[4],e[0]])
+    print(mesh_point_array)
+
+    
+    for u in range(num_points-1):
+        for v in range(num_points-1):
+            cells=[]
+            for m in mesh_point_array : 
+                if m[0]>=u and m[0]<=u+1 and m[1]>=v and m[1]<=v+1 :
+                    cells.append(m[2])
+            if len(cells)>=3:
+                bary_cell=barycenter(cells)
+                p0=bary_cell
+                print(u,v)
+                to_delete=[]
+                for i in range(len(cells)):
+                    count=0
+                    c0 = cells[i]
+                    for j in range(len(cells)):
+                        c1=cells[j]
+                        if c0==c1:
+                            print("same")
+                            print(i,j)
+                            count+=1
+                        if count>1:
+                            to_delete.append(j)
+                print("to delete")
+                print(to_delete)
+                if len(to_delete)>=1:
+                    cells.pop(to_delete[0])
+                for c in cells:
+                    print(c)
+
+                norm_u=App.Vector(U_plane[u][1][0],U_plane[u][1][1],U_plane[u][1][2])
+                norm_v=App.Vector(V_plane[v][1][0],V_plane[v][1][1],V_plane[v][1][2])
+                angles=[]
+                for c in cells:
+                    v0 = App.Vector(c[0]-bary_cell[0],c[1]-bary_cell[1],c[2]-bary_cell[2])
+                    angles.append(np.arctan2(cos_between_vectors(v0,norm_u),cos_between_vectors(v0,norm_v)))
+                # p0 = cells[0]
+                sorted_ind = sorted(range(len(angles)), key=lambda k: angles[k])
+                for ic in range(len(cells)-1):
+                    p1 = cells[sorted_ind[ic]]
+                    p2 = cells[sorted_ind[ic+1]]
+                    facets.append([p0,p1,p2])
+                p1 = cells[sorted_ind[len(cells)-1]]
+                p2 = cells[sorted_ind[0]]
+                facets.append([p0,p1,p2])
+            # for c in cells:
+            #     print(c)
+    # exit()
+    # for u in range(mx):
+    #     for v in range(my+1):
+    #         p0= get_3d_point(u, v,point_lookup)
+    #         p1= get_3d_point(u+1, v,point_lookup)
+    #         p2= get_3d_point(u+1, v+1,point_lookup)
+    #         p3= get_3d_point(u, v+1,point_lookup)
+    #         if (p0 is not None) and (p1 is not None) and (p2 is not None) and (p3 is not None):
+    #             print(p0,p1,p2,p3)
+    #             facets.append([p0,p1,p2])
+    #             facets.append([p2,p3,p0])
 
 
+    # add edge facets
+    # for i in range(len(edge_uv)-1):
+    #     # (Vector (12.425, 73.364, 0.0), 8, 5, 22.167290719828188, 0.0004888754642841746, 22.175973457787983)
+    #     # (Vector (36.374, 65.418, 0.0), 8, 6, 21.042641879148366, 0.00023236956571599134, 21.045320926670513)
+    #     # (Vector (53.912, 0.0, 168.707), 2, 8, -20.001421453839992, 2.415159221526883e-05, 20.125564086759535) should be 2,7 not 2,8
+    #     delta_u=abs(edge_uv[i+1][1]-edge_uv[i][1])
+    #     delta_v=abs(edge_uv[i+1][2]-edge_uv[i][2])
+    #     if i==14 : 
+    #         print(edge_uv[i+1][1],edge_uv[i][1],delta_u,delta_v)
+    #     # if (edge_uv[i][1]!=edge_uv[i+1][1]) or (edge_uv[i][2]!=edge_uv[i+1][2]) :
+    #     if (delta_u + delta_v)==1:
+    #         p0 = edge_uv[i][0]
+    #         p1 = get_3d_point(edge_uv[i][1],edge_uv[i][2],point_lookup)
+    #         p2 = edge_uv[i+1][0]
+    #         p3 = get_3d_point(edge_uv[i+1][1],edge_uv[i+1][2],point_lookup)
+    #         facets.append([p2,p1,p0])
+    #         facets.append([p2,p3,p1])
+    #     elif (delta_u + delta_v)==0:
+    #         p0 = edge_uv[i][0]
+    #         p1 = get_3d_point(edge_uv[i][1],edge_uv[i][2],point_lookup)
+    #         p2 = edge_uv[i+1][0]
+    #         facets.append([p2,p1,p0])
+    #     elif (delta_u==1) and  (delta_v==1):
+    #         p0 = edge_uv[i][0]
+    #         p1 = get_3d_point(edge_uv[i][1],edge_uv[i][2],point_lookup)
+    #         p2 = get_3d_point(edge_uv[i][1],edge_uv[i+1][2],point_lookup)
+    #         facets.append([p2,p1,p0])
+    #         p1 = get_3d_point(edge_uv[i][1],edge_uv[i+1][2],point_lookup)
+    #         p2 = edge_uv[i+1][0]
+    #         facets.append([p2,p1,p0])
+    #         p0 = edge_uv[i+1][0]
+    #         p1 = get_3d_point(edge_uv[i][1],edge_uv[i+1][2],point_lookup)
+    #         p2 = get_3d_point(edge_uv[i+1][1],edge_uv[i+1][2],point_lookup)
+    #         facets.append([p2,p1,p0])
 
     import Mesh
 
-    facets=[]
-    for u in range(mx):
-        for v in range(my+1):
-    #        p0= get_point_index(u, v)
-    #        p1= get_point_index(u+1, v)
-    #        p2= get_point_index(u+1, v+1)
-    #        if (p0!=-1) and (p1!=-1) and (p2!=-1) :
-    #            facets.append([p0,p1,p2])
-    #        p0= get_point_index(u, v)
-    #        p1= get_point_index(u, v+1)
-    #        p2= get_point_index(u+1, v+1)
-    #        if (p0!=-1) and (p1!=-1) and (p2!=-1) :
-    #            facets.append([p0,p1,p2])
-            first_p0=None
-            second_p0=None
-            first_p2=None
-            second_p2=None
-            p0= get_3d_point(u, v,point_lookup)
-            p1= get_3d_point(u+1, v,point_lookup)
-            p2= get_3d_point(u+1, v+1,point_lookup)
-            First_tri_p0=False
-            First_tri_p2=False
-            if (p0 is not None) and (p1 is not None) and (p2 is not None) :
-                facets.append([p0,p1,p2])
-            if (p0 is None) and (p1 is not None) and (p2 is not None) :
-                p0=V_curve[v][0][0]
-                first_p0=p0
-                facets.append([p0,p1,p2])
-            if (p0 is not None) and (p1 is not None) and (p2 is None) :
-                p2=U_curve[u+1][0][len(U_curve[u+1][0])-1]
-                first_p2=p2
-                facets.append([p0,p1,p2])
-            if (p0 is None) and (p1 is not None) and (p2 is None) :
-                p0=V_curve[v][0][0]
-                p2=U_curve[u+1][0][len(U_curve[u+1][0])-1]
-                facets.append([p0,p1,p2])
-    #        if (p0 is not None) and (p1 is None) and (p2 is None) :
-    #            p1=V_curve[v][0][len(V_curve[v][0])-1]
-    #            p2=V_curve[v+1][0][len(V_curve[v+1][0])-1]
-    #            facets.append([p0,p1,p2])
-            p0= get_3d_point(u, v,point_lookup)
-            p2= get_3d_point(u, v+1,point_lookup)
-            p1= get_3d_point(u+1, v+1,point_lookup)
-            if (p0 is not None) and (p1 is not None) and (p2 is not None) :
-                facets.append([p0,p1,p2])
-            if (p0 is not None) and (p1 is not None) and (p2 is None) :
-                p2=V_curve[v+1][0][0]
-                second_p2=p2
-                facets.append([p0,p1,p2])
-                First_tri_p2=True
-            if (p0 is not None) and (p1 is None) and (p2 is None) :
-                p2=U_curve[u][0][len(U_curve[u][0])-1]
-                p1=U_curve[u+1][0][len(U_curve[u+1][0])-1]
-                facets.append([p0,p1,p2])
-            if (p0 is None) and (p1 is not None) and (p2 is not None) :
-                p0=U_curve[u][0][0]
-                second_p0=p0
-                facets.append([p0,p1,p2])
-                First_tri_p0=True
-    #        if (p0 is not None) and (p1 is None) and (p2 is not None) :
-    #            p1=V_curve[v+1][0][len(V_curve[v+1][0])-1]
-    #            facets.append([p0,p1,p2])
+    
+    # for u in range(mx):
+    #     for v in range(my+1):
+    # #        p0= get_point_index(u, v)
+    # #        p1= get_point_index(u+1, v)
+    # #        p2= get_point_index(u+1, v+1)
+    # #        if (p0!=-1) and (p1!=-1) and (p2!=-1) :
+    # #            facets.append([p0,p1,p2])
+    # #        p0= get_point_index(u, v)
+    # #        p1= get_point_index(u, v+1)
+    # #        p2= get_point_index(u+1, v+1)
+    # #        if (p0!=-1) and (p1!=-1) and (p2!=-1) :
+    # #            facets.append([p0,p1,p2])
+    #         first_p0=None
+    #         second_p0=None
+    #         first_p2=None
+    #         second_p2=None
+    #         p0= get_3d_point(u, v,point_lookup)
+    #         p1= get_3d_point(u+1, v,point_lookup)
+    #         p2= get_3d_point(u+1, v+1,point_lookup)
+    #         First_tri_p0=False
+    #         First_tri_p2=False
+    #         if (p0 is not None) and (p1 is not None) and (p2 is not None) :
+    #             facets.append([p0,p1,p2])
+    #         if (p0 is None) and (p1 is not None) and (p2 is not None) :
+    #             p0=V_curve[v][0][0]
+    #             first_p0=p0
+    #             facets.append([p0,p1,p2])
+    #         if (p0 is not None) and (p1 is not None) and (p2 is None) :
+    #             p2=U_curve[u+1][0][len(U_curve[u+1][0])-1]
+    #             first_p2=p2
+    #             facets.append([p0,p1,p2])
+    #         if (p0 is None) and (p1 is not None) and (p2 is None) :
+    #             p0=V_curve[v][0][0]
+    #             p2=U_curve[u+1][0][len(U_curve[u+1][0])-1]
+    #             facets.append([p0,p1,p2])
+    # #        if (p0 is not None) and (p1 is None) and (p2 is None) :
+    # #            p1=V_curve[v][0][len(V_curve[v][0])-1]
+    # #            p2=V_curve[v+1][0][len(V_curve[v+1][0])-1]
+    # #            facets.append([p0,p1,p2])
+    #         p0= get_3d_point(u, v,point_lookup)
+    #         p2= get_3d_point(u, v+1,point_lookup)
+    #         p1= get_3d_point(u+1, v+1,point_lookup)
+    #         if (p0 is not None) and (p1 is not None) and (p2 is not None) :
+    #             facets.append([p0,p1,p2])
+    #         if (p0 is not None) and (p1 is not None) and (p2 is None) :
+    #             p2=V_curve[v+1][0][0]
+    #             second_p2=p2
+    #             facets.append([p0,p1,p2])
+    #             First_tri_p2=True
+    #         if (p0 is not None) and (p1 is None) and (p2 is None) :
+    #             p2=U_curve[u][0][len(U_curve[u][0])-1]
+    #             p1=U_curve[u+1][0][len(U_curve[u+1][0])-1]
+    #             facets.append([p0,p1,p2])
+    #         if (p0 is None) and (p1 is not None) and (p2 is not None) :
+    #             p0=U_curve[u][0][0]
+    #             second_p0=p0
+    #             facets.append([p0,p1,p2])
+    #             First_tri_p0=True
+    # #        if (p0 is not None) and (p1 is None) and (p2 is not None) :
+    # #            p1=V_curve[v+1][0][len(V_curve[v+1][0])-1]
+    # #            facets.append([p0,p1,p2])
 
-            if(first_p0 is not None) and (second_p0 is not None) and (p1 is not None):
-                facets.append([first_p0,p1,second_p0])
-    #        if(first_p2 is not None) and (second_p2 is not None) and (p0 is not None):
-    #            facets.append([p0,first_p2,second_p2])
+    #         if(first_p0 is not None) and (second_p0 is not None) and (p1 is not None):
+    #             facets.append([first_p0,p1,second_p0])
+    # #        if(first_p2 is not None) and (second_p2 is not None) and (p0 is not None):
+    # #            facets.append([p0,first_p2,second_p2])
                 
-            # edges front and back   
-            first_p0=None
-            second_p0=None
-            p0= get_3d_point(u, v,point_lookup)
-            p1= get_3d_point(u+1, v,point_lookup)
-            p2= get_3d_point(u+1, v+1,point_lookup)
-            if (p0 is None) and (p1 is None) and (p2 is not None) :
-                #find if U or V+1 is the closest point
-                if First_tri_p0:
-                    p0=U_curve[u][0][0]
-                    p1=U_curve[u+1][0][0]
-                    facets.append([p0,p1,p2])
-                else:
-                    p0=V_curve[v+1][0][0]
-                    p1=U_curve[u+1][0][0]
-                    facets.append([p0,p1,p2])
-            first_p2=None
-            second_p2=None
-            p0= get_3d_point(u, v,point_lookup)
-            p2= get_3d_point(u, v+1,point_lookup)
-            p1= get_3d_point(u+1, v+1,point_lookup)
-            if (p0 is not None) and (p1 is not None) and (p2 is None) :
-                if First_tri_p2:
-                    p1=V_curve[v+1][0][0]
-                    p2=U_curve[u][0][len(U_curve[u][0])-1]
-                    facets.append([p0,p1,p2])
-    #            else:
-    #                p0=V_curve[v+1][0][0]
-    #                p1=U_curve[u+1][0][0]
-    #                facets.append([p0,p1,p2])
-    #print(facets)
-    u=0
-    for v in range(0,my):
-        p0= V_curve[v][0][0]
-        p1= get_3d_point(u, v,point_lookup)
-        p2= get_3d_point(u, v+1,point_lookup)
-        first_tri=False
-        if (p0 is not None) and (p1 is not None) and (p2 is not None) :
-            facets.append([p0,p1,p2])
-            first_tri=True
-        p1=p2
-        p2= V_curve[v+1][0][0]
-        if (p0 is not None) and (p1 is not None) and (p2 is not None) and (first_tri==True):
-            facets.append([p0,p1,p2])
-    u=mx
-    for v in range(0,my):
-        p0= get_3d_point(u, v,point_lookup)
-        p1= V_curve[v][0][len(V_curve[v][0])-1]
-        p2= V_curve[v+1][0][len(V_curve[v+1][0])-1]
-        if (p0 is not None) and (p1 is not None) and (p2 is not None) :
-            facets.append([p0,p1,p2])
-        p1=p2
-        p2= get_3d_point(u, v+1,point_lookup)
-        if (p0 is not None) and (p1 is not None) and (p2 is not None) :
-            facets.append([p0,p1,p2])
+    #         # edges side
+    #         first_p0=None
+    #         second_p0=None
+    #         p0= get_3d_point(u, v,point_lookup)
+    #         p1= get_3d_point(u+1, v,point_lookup)
+    #         p2= get_3d_point(u+1, v+1,point_lookup)
+    #         if (p0 is None) and (p1 is None) and (p2 is not None) :
+    #             #find if U or V+1 is the closest point
+    #             if First_tri_p0:
+    #                 p0=U_curve[u][0][0]
+    #                 p1=U_curve[u+1][0][0]
+    #                 facets.append([p0,p1,p2])
+    #             else:
+    #                 p0=V_curve[v+1][0][0]
+    #                 p1=U_curve[u+1][0][0]
+    #                 facets.append([p0,p1,p2])
+    #         first_p2=None
+    #         second_p2=None
+    #         p0= get_3d_point(u, v,point_lookup)
+    #         p2= get_3d_point(u, v+1,point_lookup)
+    #         p1= get_3d_point(u+1, v+1,point_lookup)
+    #         if (p0 is not None) and (p1 is not None) and (p2 is None) :
+    #             if First_tri_p2:
+    #                 p1=V_curve[v+1][0][0]
+    #                 p2=U_curve[u][0][len(U_curve[u][0])-1]
+    #                 facets.append([p0,p1,p2])
+    # #            else:
+    # #                p0=V_curve[v+1][0][0]
+    # #                p1=U_curve[u+1][0][0]
+    # #                facets.append([p0,p1,p2])
+    # #print(facets)
+    # # edge front and back
+    # u=0
+    # for v in range(0,my):
+    #     p0= V_curve[v][0][0]
+    #     p1= get_3d_point(u, v,point_lookup)
+    #     p2= get_3d_point(u, v+1,point_lookup)
+    #     first_tri=False
+    #     if (p0 is not None) and (p1 is not None) and (p2 is not None) :
+    #         facets.append([p0,p1,p2])
+    #         first_tri=True
+    #     p1=p2
+    #     p2= V_curve[v+1][0][0]
+    #     if (p0 is not None) and (p1 is not None) and (p2 is not None) and (first_tri==True):
+    #         facets.append([p0,p1,p2])
+    # u=mx
+    # for v in range(0,my):
+    #     p0= get_3d_point(u, v,point_lookup)
+    #     p1= V_curve[v][0][len(V_curve[v][0])-1]
+    #     p2= V_curve[v+1][0][len(V_curve[v+1][0])-1]
+    #     if (p0 is not None) and (p1 is not None) and (p2 is not None) :
+    #         facets.append([p0,p1,p2])
+    #     p1=p2
+    #     p2= get_3d_point(u, v+1,point_lookup)
+    #     if (p0 is not None) and (p1 is not None) and (p2 is not None) :
+    #         facets.append([p0,p1,p2])
 
-    # parse the corners here to add 2 facets at each corners
-    corner_uv=[]
-    for c in corner_pts:
-        min_u=10E10
-        min_v=10E10
-        min_d=10E10
-        Current_U=0
-        Current_V=0
-        for up in U_plane:
-            dist_u=distance_point_to_plane(c[1],up[1][0],up[1][1],up[1][2],up[1][3])
-            for vp in V_plane:
-                dist_v=distance_point_to_plane(c[1],vp[1][0],vp[1][1],vp[1][2],vp[1][3])
-                p0= get_3d_point(up[0], vp[0],point_lookup)
-                if p0 is not None:
-                    dist=distance_vectors(p0,c[1])
-                    if dist<min_d:
-                        min_d=dist
-                        min_u=dist_u
-                        min_v=dist_v
-                        Current_U=up[0]
-                        Current_V=vp[0]
-        corner_uv.append((c,Current_U,Current_V,min_u,min_v,min_d))
-    print("corner")
-    print(corner_uv)
+    # # corners 
+    # # parse the corners here to add 2 facets at each corners
+    # corner_uv=[]
+    # for c in corner_pts:
+    #     min_u=10E10
+    #     min_v=10E10
+    #     min_d=10E10
+    #     Current_U=0
+    #     Current_V=0
+    #     for up in U_plane:
+    #         dist_u=distance_point_to_plane(c[1],up[1][0],up[1][1],up[1][2],up[1][3])
+    #         for vp in V_plane:
+    #             dist_v=distance_point_to_plane(c[1],vp[1][0],vp[1][1],vp[1][2],vp[1][3])
+    #             p0= get_3d_point(up[0], vp[0],point_lookup)
+    #             if p0 is not None:
+    #                 dist=distance_vectors(p0,c[1])
+    #                 if dist<min_d:
+    #                     min_d=dist
+    #                     min_u=dist_u
+    #                     min_v=dist_v
+    #                     Current_U=up[0]
+    #                     Current_V=vp[0]
+    #     corner_uv.append((c,Current_U,Current_V,min_u,min_v,min_d))
+    # print("corner")
+    # print(corner_uv)
 
-    # Create detection of different corners : bottom/left, bottom/right, ...
+    # # Create detection of different corners : bottom/left, bottom/right, ...
 
-    p0= get_3d_point(corner_uv[0][1],corner_uv[0][2],point_lookup)
-    p1= corner_uv[0][0][1]
-    p2= V_curve[corner_uv[0][2]][0][0]
-    p4= U_curve[corner_uv[0][1]][0][len(U_curve[corner_uv[0][1]][0])-1]
-    facets.append([p0,p4,p2])
-    facets.append([p2,p4,p1])
+    # p0= get_3d_point(corner_uv[0][1],corner_uv[0][2],point_lookup)
+    # p1= corner_uv[0][0][1]
+    # p2= V_curve[corner_uv[0][2]][0][0]
+    # p4= U_curve[corner_uv[0][1]][0][len(U_curve[corner_uv[0][1]][0])-1]
+    # facets.append([p0,p4,p2])
+    # facets.append([p2,p4,p1])
 
-    p0= get_3d_point(corner_uv[1][1],corner_uv[1][2],point_lookup)
-    p1= corner_uv[1][0][1]
-    p2= U_curve[corner_uv[1][1]][0][len(U_curve[corner_uv[1][1]][0])-1]
-    p4= V_curve[corner_uv[1][2]][0][len(V_curve[corner_uv[1][2]][0])-1]
-    facets.append([p0,p1,p2])
-    facets.append([p0,p4,p1])
+    # p0= get_3d_point(corner_uv[1][1],corner_uv[1][2],point_lookup)
+    # p1= corner_uv[1][0][1]
+    # p2= U_curve[corner_uv[1][1]][0][len(U_curve[corner_uv[1][1]][0])-1]
+    # p4= V_curve[corner_uv[1][2]][0][len(V_curve[corner_uv[1][2]][0])-1]
+    # facets.append([p0,p1,p2])
+    # facets.append([p0,p4,p1])
 
-    p0= get_3d_point(corner_uv[2][1],corner_uv[2][2],point_lookup)
-    p1= corner_uv[2][0][1]
-    p2= U_curve[corner_uv[2][1]][0][0]
-    p4= V_curve[corner_uv[2][2]][0][len(V_curve[corner_uv[2][2]][0])-1]
-    facets.append([p2,p1,p0])
-    facets.append([p1,p4,p0])
-    print(corner_uv[2])
+    # p0= get_3d_point(corner_uv[2][1],corner_uv[2][2],point_lookup)
+    # p1= corner_uv[2][0][1]
+    # p2= U_curve[corner_uv[2][1]][0][0]
+    # p4= V_curve[corner_uv[2][2]][0][len(V_curve[corner_uv[2][2]][0])-1]
+    # facets.append([p2,p1,p0])
+    # facets.append([p1,p4,p0])
+    # print(corner_uv[2])
 
-    p0= get_3d_point(corner_uv[3][1],corner_uv[3][2],point_lookup)
-    p1= corner_uv[3][0][1]
-    p2= U_curve[corner_uv[3][1]][0][0]
-    p4= V_curve[corner_uv[3][2]][0][0]
-    facets.append([p0,p1,p2])
-    facets.append([p0,p4,p1])
+    # p0= get_3d_point(corner_uv[3][1],corner_uv[3][2],point_lookup)
+    # p1= corner_uv[3][0][1]
+    # p2= U_curve[corner_uv[3][1]][0][0]
+    # p4= V_curve[corner_uv[3][2]][0][0]
+    # facets.append([p0,p1,p2])
+    # facets.append([p0,p4,p1])
 
-    # End
+    # # End
 
     # Create mesh data
     mesh_data = []
